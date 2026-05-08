@@ -1,0 +1,12 @@
+:root {
+  --brand: green;
+}
+
+body {
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans", "Apple Color Emoji",
+    "Segoe UI Emoji";
+}
+
+a {
+  color: var(--brand);
+}

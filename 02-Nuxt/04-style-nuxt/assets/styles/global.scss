@@ -1,0 +1,43 @@
+$container-max: 960px;
+$border: #e5e7eb;
+$radius: 8px;
+$space-2: 8px;
+$space-3: 12px;
+$btn-bg: red;
+$btn-bg-hover: #f3f4f6;
+
+@use "sass:math";
+
+@function rem($px, $base: 16px) {
+  @return math.div($px, $base) * 1rem;
+}
+
+@mixin flex-center($gap: 0) {
+  display: inline-flex;
+  align-items: center;
+  gap: $gap;
+}
+
+@mixin button-base {
+  border: 1px solid $border;
+  border-radius: $radius;
+  cursor: pointer;
+}
+
+.container {
+  max-width: $container-max;
+  margin: 0 auto;
+  padding: rem($space-3);
+}
+
+.btn {
+  @include flex-center($space-2);
+  @include button-base;
+
+  padding: rem($space-2) rem($space-3);
+  background: $btn-bg;
+}
+
+.btn:hover {
+  background: $btn-bg-hover;
+}

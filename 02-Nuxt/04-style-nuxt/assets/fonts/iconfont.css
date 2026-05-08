@@ -1,0 +1,17 @@
+.iconfont {
+  display: inline-flex;
+  width: 1em;
+  height: 1em;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.iconfont::before {
+  display: inline-block;
+}
+
+.iconfont.icon-home::before {
+  content: "\1F3E0";
+}

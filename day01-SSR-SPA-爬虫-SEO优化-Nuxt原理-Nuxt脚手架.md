@@ -1533,7 +1533,7 @@ createApp **都能生成 HTML**，但 SSR 官方推荐用 `createSSRApp` 来表�
   - 公司一般要锁定，否则某个版本更新，导致公司业务受到影响
 - 其他用到就知道了
 
-## 4.运行时的配置
+## 4.运行时的配置即runtimeConfig
 
 #### 即配置全局变量
 
@@ -1600,6 +1600,8 @@ createApp **都能生成 HTML**，但 SSR 官方推荐用 `createSSRApp` 来表�
   - Nuxt 会把环境变量映射到 `runtimeConfig`
     - `NUXT_APP_KEY` -> `runtimeConfig.appKey`
     - `NUXT_PUBLIC_BASE_URL` -> `runtimeConfig.public.baseURL`
+      - env里面写法要写成驼峰才有效果
+        - dotenv，next默认下载了
   - 优先级（你这里理解成“覆盖”即可）
     - 运行时环境变量（例如 `.env` / 部署平台注入）会覆盖 `nuxt.config.ts` 里写的默认值
     - 所以 `.env` 里的值通常优先级更高
