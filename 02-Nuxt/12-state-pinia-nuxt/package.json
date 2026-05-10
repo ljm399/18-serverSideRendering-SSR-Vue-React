@@ -1,0 +1,19 @@
+{
+  "name": "12-state-pinia-nuxt",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev --port 3000",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare"
+  },
+  "dependencies": {
+    "@pinia/nuxt": "^0.11.2",
+    "nuxt": "^4.4.4",
+    "pinia": "^3.0.3",
+    "vue": "^3.5.33",
+    "vue-router": "^5.0.6"
+  }
+}
