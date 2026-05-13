@@ -319,6 +319,28 @@
     - 做 Nuxt 页面首屏数据：优先 `useAsyncData/useFetch`。
     - 做通用接口封装或迁移老项目：可以用 axios，但要自己补齐 SSR/状态这些能力。
 
+
+
+- 优势：
+
+  - ##### `useFetch` 有缓存/去重（dedupe）
+
+  ```
+  async function rqt() {
+    const data2 = await getHomeInfo()
+    console.log(data.value.data, '我是data');
+    
+  }
+  ```
+
+  你 getHomeInfo() 内部用的是 `useFetch`。`useFetch` 在 Nuxt 里会对**相同 key/相同 URL**的请求做复用
+
+  const { data } = await getHomeInfo()
+
+  再调用一次同样的 getHomeInfo()，**直接复用第一次**的结果，Network 看起来就“没发新请求”,控制台有打印（因为复用了）。
+
+
+
 ## 4.useLazyFetch
 
 - 使用场景
@@ -763,6 +785,10 @@ async function login() {
 
 ## 2.pinia
 
+### Pinia作用过程
+
+#### 第一次只有服务端的pinia发送请求，数据同步到客户端，客户端不用发送请求（验证你会发现控制台打印了，但network没有网络请求）
+
 - 安装
 
   ```bash
@@ -1058,6 +1084,7 @@ Sass 会把 `assets/css` 也当成“可搜索目录”，所以你就可以在�
 - VSCode：配置用户代码片段
 
   - 打开： 选择 `vue.json`
+
   - 粘贴示例（触发前缀：`oppo-comp`）
 
     ```json
@@ -1088,6 +1115,20 @@ Sass 会把 `assets/css` 也当成“可搜索目录”，所以你就可以在�
       }
     }
     ```
+    
+    - 注意
+    
+      ```ts
+      export interface IProps {
+        title?: string
+      }
+      
+      const props = withDefaults(defineProps<IProps>(), {
+        title: ''
+      })
+      ```
+    
+      - 要写？，否则会有错误提示
 
 - 第二种写法（JS 版本，不写 interface）
 
@@ -1188,7 +1229,9 @@ pages/[...slug].vue
 
 # 怎么用ai ，把效果图发给ai，自己审阅就行
 
+### 注意先把框架比如variable.scss中的wrapper.scss以及bgcolor这些定好
 
+- 如何告诉ai去里面拿基本样式配置
 
 
 

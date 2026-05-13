@@ -3,8 +3,8 @@
     <div class="app-header__top">
       <div class="wrapper app-header__top-inner">
         <div class="app-header__top-left">
-          <a href="javascript:;" class="app-header__top-link">OPPO官网</a>
-          <a href="javascript:;" class="app-header__top-link">一加官网</a>
+          <a href="javascript:;" class="app-header__top-link">新怡红木官网</a>
+          <a href="javascript:;" class="app-header__top-link">红木家具</a>
         </div>
 
         <div class="app-header__top-right">
@@ -14,10 +14,10 @@
             @mouseenter="showQrcode = true"
             @mouseleave="showQrcode = false"
           >
-            下载 OPPO 商城APP
+            添加我的方式
             <div v-show="showQrcode" class="app-header__qrcode-pop">
               <img class="app-header__qrcode-img" :src="qrcodeUrl" alt="qrcode" />
-              <div class="app-header__qrcode-text">下载 OPPO 商城</div>
+              <div class="app-header__qrcode-text">曹泽卫微信</div>
             </div>
           </a>
 
@@ -145,5 +145,22 @@ const qrcodeUrl = qrcodePng
   font-size: $fontSize12;
   color: $textSubColor;
   text-align: center;
+}
+
+@media (max-width: 768px) {
+  .app-header__top-left {
+    display: none;
+  }
+  .wrapper.app-header__top-inner {
+    justify-content: space-evenly;
+  }
+
+  .app-header__top-link {
+    padding: 0 16px;
+  }
+
+  .app-header__cart-text {
+    display: none;
+  }
 }
 </style>

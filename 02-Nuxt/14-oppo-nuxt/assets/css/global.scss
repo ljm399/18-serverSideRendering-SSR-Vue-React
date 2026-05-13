@@ -7,6 +7,14 @@
 .wrapper {
   width: $contentWidth;
   margin: 0 auto;
+  box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+  .wrapper {
+    width: 100%;
+    padding: 0 16px;
+  }
 }
 
 html {

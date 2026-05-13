@@ -5,6 +5,7 @@
 .nitro
 .cache
 dist
+14-oppo-nuxt
 
 # Node dependencies
 node_modules
