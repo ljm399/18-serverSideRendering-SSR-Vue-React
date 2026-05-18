@@ -1,0 +1,13 @@
+@use "../styles/variables.scss" as *;
+
+.title {
+  font-size: $fs30;
+  color: $primaryColor;
+  @include border();
+}
+
+.block {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid #eee;
+}

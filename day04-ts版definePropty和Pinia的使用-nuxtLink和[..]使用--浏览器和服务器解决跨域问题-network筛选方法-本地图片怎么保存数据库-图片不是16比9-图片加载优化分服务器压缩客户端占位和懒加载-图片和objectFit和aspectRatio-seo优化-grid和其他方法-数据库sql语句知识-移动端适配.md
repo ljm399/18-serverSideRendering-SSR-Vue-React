@@ -189,16 +189,109 @@ const BASE_URL = "/api/oppo"; // 原来是const BASE_URL = "http://localhost:800
   - Nuxt 服务端（Nitro）转发到后端：`http://localhost:8000/oppo/**`
   - 这样**浏览器永远同源请求**，不会有 CORS 跨域问题（开发/生产都成立）
 
-
-
-
-
 #### 服务器做（推荐）
+
+##### 服务器里用 Nginx 反向代理（线上常用）
+
+你写的这种配置：
+
+```nginx
+server {
+  listen 80;
+  server_name _;
+
+  location / {
+    proxy_pass http://127.0.0.1:3002;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+}
+```
+
+它的作用是：
+
+- 用户访问 `http://你的域名/`
+- Nginx 转发到你机器上的 Nuxt（例如 `127.0.0.1:3002`）
+
+这个配置本身主要解决的是：
+
+- 统一对外端口（80/443）
+- HTTPS 终止（你后续配 443）
+- 让 Nuxt 应用跑在内网端口，不直接暴露
+
+###### 那它能不能“解决跨域”？
+
+它可以帮助你解决跨域，但关键点是：**让浏览器只请求同源域名**。
+
+例子：
+
+- 页面地址（公网 IP）：`http://47.120.10.20/`
+- 如果你在浏览器直接请求后端：`http://47.120.10.20:8000/oppo/info` -> 这就是跨域（端口不同）
+- 如果你改成请求同源：`http://47.120.10.20/api/oppo/info` -> 这就不跨域
+
+然后把 `/api` 这一段交给 Nginx 或 Nuxt 去转发到真实后端。
+
+###### 域名/IP 为什么有时候不用写端口？
+
+- `http://47.120.10.20` 等价于 `http://47.120.10.20:80`
+- `https://47.120.10.20` 等价于 `https://47.120.10.20:443`
+
+只有当你用的不是默认端口（比如 `8000`、`3002`）时，才需要写 `:8000`、`:3002`。
+
+###### 一种常见写法：Nginx 同时代理 Nuxt 和后端 API
+
+```nginx
+server {
+  listen 80;
+  server_name 47.120.10.20;
+
+  location / {
+    proxy_pass http://127.0.0.1:3002;
+  }
+
+  location /api/oppo/ {
+    proxy_pass http://127.0.0.1:8000/oppo/;
+  }
+}
+```
+
+这样浏览器永远请求 `http://47.120.10.20`（80 端口默认可省略），就不会触发 CORS。
+
+###### 这时候浏览器会不会访问 8000 端口？
+
+不会。
+
+- 浏览器只会访问：
+  - `http://47.120.10.20/`（页面）
+  - `http://47.120.10.20/api/oppo/info`（接口）
+- Nginx 收到 `47.120.10.20` 的请求后：
+  - 看到路径是 `/` -> 转发给 Nuxt：`127.0.0.1:3002`
+  - 看到路径是 `/api/oppo/` -> 转发给后端：`127.0.0.1:8000/oppo/`
+
+也就是说：
+
+- **对浏览器来说**：永远是同一个地址 `http://47.120.10.20`（同源）
+- **8000 端口**：是服务器内网服务，给 Nginx/服务器内部访问的
+
+###### 那还需要后端的 CORS 中间件（app.use...）吗？
+
+看你“浏览器到底有没有跨域直连后端”。
+
+- 如果你已经用 Nginx（或 Nuxt server/api）把接口做成同源：
+  - 浏览器请求的是 `http://47.120.10.20/api/...`
+  - **一般不需要**再在后端额外写 CORS（因为已经不跨域了）
+- 如果你仍然让浏览器直接请求后端域名/端口：
+  - 例如页面在 `http://47.120.10.20/`，接口请求写成 `http://47.120.10.20:8000/oppo/info`
+  - 这就跨域了，**才需要**后端开启 CORS（或 Nginx 做同源代理）
+
+下面这段 `app.use(...)` 属于“后端直接对外提供接口时”的通用 CORS 方案：
 
 ```js
 app.use(async (ctx, next) => {
   // 1) 获取浏览器发来的 Origin（跨域请求来源）
-  const requestOrigin = ctx.get("Origin");// 从浏览器发来的请求头里，拿到当前是谁在请求你接口（比如 https://www.xxx.com）。
+  const requestOrigin = ctx.get("Origin");// 从浏览器发来的请求头里，拿到当前是谁在请求你接口（比如 http://47.120.10.20）。
 
   // 2) 设置允许跨域的来源
   // - 如果有 Origin：回显该 Origin（常用做法，便于后续支持 cookie）
@@ -617,9 +710,9 @@ priceInfo?: IPriceInfo;
 
 3) `ON DELETE CASCADE`
 
-- 当你删除一条分类 `oppo_category.id = X` 时
-- 数据库会**自动删除**所有 `oppo_productDetail.category_id = X` 的记录
-- 这叫“级联删除”（cascade）
+- 当你删除一条分类 `oppo_category.id = 1`：
+  - 数据库会**自动删除**所有 `oppo_productDetail.category_id = 1` 的记录
+  - 这叫“级联删除”（cascade）
 
 
 
@@ -1164,6 +1257,73 @@ const outputStat = fs.statSync(outPath);
 
 
 
+## 上面项目相对单纯vue项目的优势
+
+### 结论：Nuxt = Vue + 一整套“生产级能力”的默认集成
+
+你这个 `14-oppo-nuxt` 项目本质还是写 Vue 组件，但 Nuxt 帮你把「路由、SSR、接口层、SEO、构建部署」这些工程化问题直接打包成框架能力。
+
+### 1) SSR/SSG/ISR：首屏更快 + SEO 更稳
+
+- 单纯 Vue SPA（纯 Vue + Router）默认是 CSR：
+  - 首屏通常返回一个空壳 HTML，真实内容靠 JS 跑完再渲染
+  - 不跑 JS 的爬虫/分享卡片/首屏体验会受影响
+- Nuxt 默认支持 SSR（也可配 SSG/ISR/按路由规则混合）：
+  - 你在 `nuxt.config.ts -> app.head` 配的 `title/meta` 会在服务端输出到 HTML
+  - Network 的 Document 里就能看到真实内容，更利于 SEO/首屏
+
+### 2) 约定式路由：少写路由配置，目录即路由
+
+- 单纯 Vue：一般要自己维护 `router/index.ts`，新增页面要手写路由表
+- Nuxt：
+  - `pages/` 自动生成路由
+  - 动态路由（如 `[id].vue`）、嵌套路由等都有固定写法
+  - 结构更统一，协作成本更低
+
+### 3) 同源接口与跨域：生产环境也能用的“服务端中转”
+
+- 单纯 Vue：
+  - 开发时靠 Vite/webpack proxy 解决跨域
+  - 上线后如果是纯静态托管，proxy 就没了，跨域需要你自己处理（后端开 CORS 或另起 BFF）
+- Nuxt：
+  - 可以用 `server/api/**` 写接口/代理，把浏览器请求变成同源（你文档里 `/api/oppo/**` 的方式）
+  - 开发/生产都成立（上线后是 Nitro 在跑）
+
+### 4) 数据获取与状态：SSR 友好的数据流
+
+- 单纯 Vue：请求通常发生在浏览器，首屏需要等接口返回
+- Nuxt：支持在服务端阶段就把数据准备好（例如 `useFetch` / `useAsyncData`），再把结果带到客户端 hydration
+  - 对首屏体验、SEO、分享预览都更友好
+  - 你项目里又结合了 `@pinia/nuxt`，初始化/复用状态更自然
+
+### 5) 性能与策略：缓存/预渲染/按路由混合渲染更顺手
+
+- Nuxt/Nitro 的缓存、`routeRules`、预渲染等能力，让你把“优化”从手工工程变成配置化/框架化。
+- 对你这个商城类首页（banner/grid/category）更常见的收益：
+  - 首屏更快
+  - 更容易做页面级缓存策略
+  - 更容易做静态化（landing 类页面）
+
+### 6) 部署更统一：同一个产物包含前端 + Node 服务端
+
+- 单纯 Vue SPA：常见是 build 出静态文件，后端另起项目
+- Nuxt：`build` 后得到可部署产物（Node server / serverless / edge 多形态），更适合 SSR 项目的完整交付
+
+### 什么时候“直接用 Vue”更合适？
+
+- 后台系统、对 SEO 不敏感、页面不需要 SSR
+- 希望部署到纯静态（CDN）且逻辑简单
+- 团队不想引入 Node 服务端运行时
+
+### 你这个 oppo 项目更适合 Nuxt 的原因
+
+- 你已经在用 `app.head` 做 SEO
+- 有跨域/代理的需求（你文档里已经写了 Nitro 中转方案）
+- 首页内容模块（banner/grid/category）首屏价值高
+- 后续要上缓存/预渲染/按路由策略时，Nuxt 会更顺手
+
+
+
 # 二。部署（13里面有全过程）
 
 ## 1.服务器购买
@@ -1175,8 +1335,6 @@ const outputStat = fs.statSync(outPath);
 ## 4.打包和部署项目
 
 - 打包的路径不能有中文路径
-
-
 
 ### 直接用node部署
 
@@ -1193,5 +1351,5 @@ const outputStat = fs.statSync(outPath);
 
 # 三。从零搭建React18 SSR应用
 
-## 后端渲染的功能SSR
+## React SSR静态页面的渲染（内容在day05里面，但视频在day04这里）
 

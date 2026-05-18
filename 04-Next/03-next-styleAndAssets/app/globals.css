@@ -1,0 +1,10 @@
+html,
+body {
+  padding: 0;
+  margin: 0;
+}
+
+main {
+  padding: 24px;
+  font-family: inherit;
+}
