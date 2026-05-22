@@ -1,0 +1,1215 @@
+# 商品列表 & 详情 & 搜索 & 项目部署
+
+## 一、navbar 组件
+
+## 二、antd 初始化
+
+安装 *ant-design* 框架，和它的类型。
+
+优先参考[官方文档](https://ant.design/docs/react/use-with-next-cn)
+
+```shell
+npm install antd
+
+npm install -D @types/antd
+```
+
+在 `_app.tsx` 中，导入 antd 的统一样式风格。
+
+src\pages\\_app.tsx
+
+```tsx
+import "antd/dist/reset.css";
+```
+
+在 `index.tsx` 中，导入 antd 的按钮组件。
+
+src\pages\index.tsx
+
+```tsx
+import { Button } from 'antd';
+```
+
+> antd 默认支持 tree shaking。
+
+## 三、首页
+
+### 1.轮播图
+
+创建 `/components/top-swiper.tsx` 组件：
+
+在其中，导入 antd 的 carousel 组件。
+
+src\components\top-swiper\index.tsx
+
+```tsx
+import React, { memo } from 'react'
+import type { FC, ReactNode } from 'react'
+import styles from './index.module.scss';
+import classNames from 'classnames';
+import { Carousel } from 'antd';
+
+const contentStyle: React.CSSProperties = {
+  margin: 0,
+  height: '160px',
+  color: '#fff',
+  lineHeight: '160px',
+  textAlign: 'center',
+  background: '#364d79',
+};
+
+interface IProps {
+  children?: ReactNode
+}
+const TopSwiper: FC<IProps> = memo(props => {
+  const onChange = (currentSlide: number) => {
+    console.log(currentSlide);
+  };
+  
+  return <div>
+    <div className={classNames('wrapper', styles['content'])}>
+    <Carousel afterChange={onChange}>
+      <div>
+        <h3 style={contentStyle}>1</h3>
+      </div>
+      <div>
+        <h3 style={contentStyle}>2</h3>
+      </div>
+      <div>
+        <h3 style={contentStyle}>3</h3>
+      </div>
+      <div>
+        <h3 style={contentStyle}>4</h3>
+      </div>
+    </Carousel>
+    </div>
+  </div>
+})
+
+TopSwiper.displayName = 'TopSwiper'
+
+export default TopSwiper
+```
+
+在首页 `index.tsx` 中，引入 top-swiper 组件
+
+src\pages\index.tsx
+
+```tsx
+import wrapper from '@/stores'
+import { fetchSearchSuggest } from '@/stores/features/home'
+import type { GetServerSideProps } from 'next'
+import { Inter } from 'next/font/google'
+import TopSwiper from '@/components/top-swiper'
+import styles from './index.module.scss'
+
+const inter = Inter({ subsets: ['latin'] })
+
+export default function Home() {
+  return (
+    <>
+      <div className={styles.home}>
+        <TopSwiper></TopSwiper>
+      </div>
+    </>
+  )
+}
+
+export const getServerSideProps: GetServerSideProps = wrapper.getServerSideProps(function (store) {
+  return async function (context) {
+    // 派发异步 action 来发起请求，拿到搜索建议，并存到 redux 中
+    await store.dispatch(fetchSearchSuggest())
+
+    return {
+      props: {}
+    }
+  }
+})
+```
+
+封装网络请求，获取轮播图的数据。
+
+src\service\features\home.ts
+
+```typescript
+export const getHomeInfo = () =>
+  ztRequest.get<IResultData<HomeInfo>>({
+    url: '/home/info'
+  })
+```
+
+在首页 `index.tsx` 中的 `getServerSideProps` 中，发送网络请求。
+
+获取到 `banners` 的数据，并传递给 top-swiper
+
+src\pages\index.tsx
+
+```typescript
+import wrapper from '@/stores'
+import { fetchSearchSuggest } from '@/stores/features/home'
+import type { GetServerSideProps } from 'next'
+import TopSwiper from '@/components/top-swiper'
+import styles from './index.module.scss'
+import { type FC, memo } from 'react'
+import type { Banner, Category, Recommend, DigitalData } from '@/types/home';
+import { getHomeInfo } from '@/service/features/home'
+
+interface IProps {
+  banners: Banner[]
+}
+const Home: FC<IProps> = memo((props) => {
+  const { banners } = props;
+
+  return (
+    <>
+      <div className={styles.home}>
+        <TopSwiper banners={banners}></TopSwiper>
+      </div>
+    </>
+  )
+})
+
+Home.displayName = 'Home'
+export default Home
+
+export const getServerSideProps: GetServerSideProps = wrapper.getServerSideProps(function (store) {
+  return async function (context) {
+    // 派发异步 action 来发起请求，拿到搜索建议，并存到 redux 中
+    await store.dispatch(fetchSearchSuggest())
+
+    const res = await getHomeInfo()
+    return {
+      props: {
+        banners: res.data.banners
+      }
+    }
+  }
+})
+```
+
+在 top-swiper 中，展示轮播图：
+
+为 carousel 组件，设置属性。
+
+为轮播图，添加背景。
+
+- 将轮播图区域放大，但图片的宽、高不变（在 `.carousel` 样式中体现）。
+
+在其中编写指示器，和操作按钮。
+
+src\components\top-swiper\index.tsx
+
+```tsx
+import React, { memo, useRef, useState } from 'react'
+import type { ElementRef, FC, ReactNode } from 'react'
+import styles from './index.module.scss'
+import classNames from 'classnames'
+import { Carousel } from 'antd'
+// import type { Banner, Category, Recommend, DigitalData } from '@/types/home'
+import type { Banner } from '@/types/home'
+import Image from 'next/image'
+
+interface IProps {
+  children?: ReactNode
+  banners: Banner[]
+}
+const TopSwiper: FC<IProps> = memo(props => {
+  const { banners } = props
+
+  // 状态
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  // ref
+  const bannerRef = useRef<ElementRef<typeof Carousel>>(null)
+
+  // 事件处理：轮播图滚动
+  const onSwiperChange = (currentSlide: number) => {
+    setCurrentIndex(currentSlide)
+  }
+
+  // 事件处理：轮播图操作上一屏点击
+  const onPrevPage = () => {
+    bannerRef.current?.prev();
+  }
+  
+  // 事件处理：轮播图操作下一屏点击
+  const onNextPage = () => {
+    bannerRef.current?.next();
+  }
+
+  return (
+    <div className={styles['top-swiper']}>
+      {/* 轮播图  */}
+      <div className={classNames('wrapper', styles['content'])}>
+        <Carousel
+          ref={bannerRef}
+          className={styles['carousel']}
+          autoplay
+          autoplaySpeed={3000}
+          fade
+          dots={false}
+          afterChange={onSwiperChange}
+        >
+          {banners.map(item => (
+            <div className={styles['swiper-item']} key={item.id}>
+              {/* 背景 */}
+              <div
+                className={styles['swiper-bg']}
+                style={{
+                  backgroundImage: `url(${item.backendPicStr})`
+                }}
+              ></div>
+
+              <Image
+                className={styles['image']}
+                src={item.picStr}
+                alt="banner"
+                width={1100}
+                height={400}
+                priority
+              ></Image>
+            </div>
+          ))}
+        </Carousel>
+
+        {/* 指示器 */}
+        <ul className={styles['dots']}>
+          {banners?.map((item, index) => (
+            <li
+              key={item.id}
+              className={classNames(styles['dot'], currentIndex === index ? styles.active : '')}
+            ></li>
+          ))}
+        </ul>
+      </div>
+
+      {/* 操作按钮（上一张/下一张） */}
+      <button className={styles['prev']} onClick={onPrevPage}>
+        <span></span>
+      </button>
+      <button className={styles['next']} onClick={onNextPage}>
+        <span></span>
+      </button>
+    </div>
+  )
+})
+
+TopSwiper.displayName = 'TopSwiper'
+
+export default TopSwiper
+```
+
+在 `next.config.js` 中，配置网络图片域名白名单：
+
+next.config.js
+
+```typescript
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  reactStrictMode: true,
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '**.music.126.net'
+      },
+      {
+        protocol: 'http',
+        hostname: '**.music.126.net'
+      }
+    ]
+  }
+}
+
+module.exports = nextConfig
+```
+
+### 2.商品目录
+
+创建 `/components/tab-category/index.tsx` 组件：
+
+src\components\tab-category\index.tsx
+
+```tsx
+import React, { memo } from 'react'
+import type { FC, ReactNode } from 'react'
+import styles from './index.module.scss'
+import classNames from 'classnames'
+
+interface IProps {
+  children?: ReactNode
+}
+const TabCategory: FC<IProps> = memo(props => {
+  return (
+    <div className={styles['tab-category']}>
+      <div className={classNames('wrapper', styles['content'])}>TabCategory</div>
+    </div>
+  )
+})
+
+TabCategory.displayName = 'TabCategory'
+
+export default TabCategory
+```
+
+在首页 `index.tsx` 中，传递 category 数据，给 tab-category。
+
+在 tab-category 中，接收 category 数据。使用 antd 的栅格系统组件 Rol、Col 做布局。
+
+src\components\tab-category\index.tsx
+
+```tsx
+import React, { memo } from 'react'
+import type { FC, ReactNode } from 'react'
+import styles from './index.module.scss'
+import classNames from 'classnames'
+import type { Category } from '@/types/home'
+import { Col, Row } from 'antd'
+import Image from 'next/image'
+
+interface IProps {
+  children?: ReactNode
+  categorys: Category[]
+}
+const TabCategory: FC<IProps> = memo(props => {
+  const { categorys } = props
+
+  return (
+    <div className={styles['tab-category']}>
+      <div className={classNames('wrapper', styles['content'])}>
+        <Row>
+          {categorys.map(item => (
+            <Col span={6} key={item.cid}>
+              <div className={styles['category-item']}>
+                <Image
+                  className={styles['image']}
+                  src={item.picStr!}
+                  alt="category"
+                  width={48}
+                  height={48}
+                ></Image>
+
+                <div className={styles['right']}>
+                  <div className={styles['title']}>{item.title}</div>
+                  {/* 描述 type == 1 才会显示*/}
+                  {item.type === 1 && (
+                    <div className={styles['sub-title']}>
+                      <span className={styles['count']}>{item.count}</span>
+                      <span className={styles['desc']}>{item.desc}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </Col>
+          ))}
+        </Row>
+      </div>
+    </div>
+  )
+})
+
+TabCategory.displayName = 'TabCategory'
+
+export default TabCategory
+```
+
+### 3.推荐区域
+
+创建 `/components/recommend/index.tsx` 组件。
+
+src\components\recommend\index.tsx
+
+```tsx
+import React, { memo } from 'react'
+import type { FC, ReactNode } from 'react'
+import styles from './index.module.scss'
+import classNames from 'classnames'
+
+interface IProps {
+  children?: ReactNode
+}
+const Recommend: FC<IProps> = memo(props => {
+  return (
+    <div className={styles['recommend']}>
+      <div className={classNames('wrapper', styles['content'])}>Recommend</div>
+    </div>
+  )
+})
+
+Recommend.displayName = 'Recommend'
+
+export default Recommend
+```
+
+在首页 `index.tsx` 中，使用该组件。并传递 recommend 数据。
+
+src\pages\index.tsx
+
+```tsx
+<RecommendCpn recommends={recommends}></RecommendCpn>
+
+//...
+
+export const getServerSideProps: GetServerSideProps = wrapper.getServerSideProps(function (store) {
+  return async function (context) {
+    // 1.派发异步 action 来发起请求，拿到搜索建议，并存到 redux 中
+    await store.dispatch(fetchSearchSuggest())
+
+    // 2.发送网络请求，获取主页信息。
+    // 3.发送网络请求，获取商品数据
+
+    const [homeinfo] = await Promise.all([getHomeInfo()])
+    return {
+      props: {
+        recommends: homeinfo.data.recommends,
+      }
+    }
+  }
+})
+```
+
+在 Recommend 中，接收 `recommend` 数据；
+
+使用 antd 的栅格系统 Rol，Col 组件，进行布局。
+
+src\components\recommend\index.tsx
+
+```tsx
+import React, { memo } from 'react'
+import type { FC, ReactNode } from 'react'
+import styles from './index.module.scss'
+import classNames from 'classnames'
+import type { Recommend } from '@/types/home'
+import { Col, Row } from 'antd'
+import Image from 'next/image'
+import Link from 'next/link'
+
+interface IProps {
+  children?: ReactNode
+  recommends: Recommend[]
+}
+const Recommend: FC<IProps> = memo(props => {
+  const { recommends } = props
+
+  return (
+    <div className={styles['recommend']}>
+      <div className={classNames('wrapper', styles['content'])}>
+        <Row>
+          {recommends.map(item => (
+            <Col key={item.id} span={12}>
+              <Link href={'/detail?id=' + item.id} className={styles['recommend-item']}>
+                <Image
+                  className={styles.image}
+                  src={item.picStr!}
+                  alt="recommend"
+                  width={542}
+                  height={300}
+                ></Image>
+              </Link>
+            </Col>
+          ))}
+        </Row>
+      </div>
+    </div>
+  )
+})
+
+Recommend.displayName = 'Recommend'
+
+export default Recommend
+```
+
+### 4.商品区域
+
+#### 1.商品标题
+
+创建 `/components/section-title/index.tsx` 组件，用于商品区域标题的封装。
+
+在其中接收 title 属性。
+
+src\components\section-title\index.tsx
+
+```tsx
+import React, { memo } from 'react'
+import type { FC, ReactNode } from 'react'
+import styles from './index.module.scss'
+
+interface IProps {
+  children?: ReactNode
+  title: string
+}
+const SectionTitle: FC<IProps> = memo(props => {
+  const { title } = props
+
+  return <div className={styles['section-title']}>{title}</div>
+})
+
+SectionTitle.displayName = 'SectionTitle'
+
+export default SectionTitle
+```
+
+在 `index.tsx` 中，使用：
+
+src\pages\index.tsx
+
+```tsx
+{/* 商品区域 */}
+<div className={classNames('wrapper', styles['content'])}>
+  <SectionTitle title="商品推荐"></SectionTitle>
+</div>
+```
+
+封装网络请求，获取商品数据。
+
+src\service\features\home.ts
+
+```typescript
+export const getProductInfo = () =>
+  ztRequest.get<IResultData<ProductInfo>>({
+    url: '/hotproduct_v2/gets'
+  })
+```
+
+在首页 `index.tsx` 中，发送网络请求：
+
+src\pages\index.tsx
+
+```typescript
+interface IProps {
+  banners: Banner[]
+  categorys: Category[]
+  recommends: Recommend[]
+  hotProducts: HotProduct[]
+}
+const Home: FC<IProps> = memo(props => {
+  const { banners, categorys, recommends, hotProducts } = props
+
+  //...
+})
+
+export const getServerSideProps: GetServerSideProps = wrapper.getServerSideProps(function (store) {
+  return async function (context) {
+    // 1.派发异步 action 来发起请求，拿到搜索建议，并存到 redux 中
+    await store.dispatch(fetchSearchSuggest())
+
+    // 2.发送网络请求，获取主页信息。
+    // 3.发送网络请求，获取商品数据
+    const [homeinfo, productinfo] = await Promise.all([getHomeInfo(), getProductInfo()])
+    return {
+      props: {
+        banners: homeinfo.data.banners,
+        categorys: homeinfo.data.categorys,
+        recommends: homeinfo.data.recommends,
+        hotProducts: productinfo.data.hotProduct,
+      }
+    }
+  }
+})
+```
+
+#### 2.商品列表
+
+编写商品区域组件；
+
+创建 `/components/grid-view/index.tsx` 组件，用于展示商品区域。
+
+src\components\grid-view\index.tsx
+
+```tsx
+import React, { memo } from 'react'
+import type { FC, ReactNode } from 'react'
+
+interface IProps {
+  children?: ReactNode
+}
+const GridView: FC<IProps> = memo(props => {
+  return <div className={'grid-view'}>
+    GridView
+  </div>
+})
+
+GridView.displayName = 'GridView'
+
+export default GridView
+```
+
+在首页 `index.tsx` 中，将 `product` 数据，传递给它 grid-view 组件。
+
+```tsx
+<GridView products={hotProducts}></GridView>
+```
+
+在 grid-view 中，接收 `products` 商品数据。在其中使用 antd 的栅栏组件 Rol，Col。
+
+将 `product` 数据，`showTip` 状态，传递给 grid-view-item 组件。
+
+src\components\grid-view\index.tsx
+
+```tsx
+import type { HotProduct } from '@/types/product'
+import React, { memo } from 'react'
+import type { FC, ReactNode } from 'react'
+import { Col, Row } from 'antd'
+import GridViewItem from '../grid-view-item'
+import styles from './index.module.scss'
+
+interface IProps {
+  children?: ReactNode
+  products: HotProduct[]
+}
+const GridView: FC<IProps> = memo(props => {
+  const { products } = props
+
+  return (
+    <div className={'grid-view'}>
+      <Row>
+        {products.map((product, index) => {
+          return (
+            <Col key={product.id} span={6}>
+              <div className={styles['view-item']}>
+                <GridViewItem product={product} showTip ={index === 0}></GridViewItem>
+              </div>
+            </Col>
+          )
+        })}
+      </Row>
+    </div>
+  )
+})
+
+GridView.displayName = 'GridView'
+
+export default GridView
+```
+
+创建 `/components/grid-view-item/index.tsx` 作为商品 item 组件。
+
+在其中，接收 grid-view 传递过来的 `product` 数据。
+
+src\components\grid-view-item\index.tsx
+
+```tsx
+import React, { memo } from 'react'
+import type { FC, ReactNode } from 'react'
+import type { HotProduct } from '@/types/product'
+import Link from 'next/link'
+import Image from 'next/image'
+import styles from './index.module.scss'
+
+interface IProps {
+  children?: ReactNode
+  product: HotProduct
+  showTip: boolean
+}
+const GridViewItem: FC<IProps> = memo(props => {
+  const { product, showTip } = props;
+  const newProduct = product.products
+
+  return (
+    <div className={styles['grid-view-item']}>
+      <div className={styles['item-image']}>
+        <Image
+          className={styles.image}
+          src={newProduct?.coverUrl!}
+          alt="image"
+          width={263}
+          height={263}
+        ></Image>
+
+        {showTip && (
+          <div className={styles.tip}>
+            <div className={styles['min-price']}>¥{newProduct?.minPrice}</div>
+            <div className={styles['original-cost']}>¥{newProduct?.originalCost}</div>
+          </div>
+        )}
+      </div>
+      <div className={styles['item-info']}>
+        {/* label */}
+        {newProduct?.couponLabelDesc && (
+          <span className={styles.label}>{newProduct.couponLabelDesc}</span>
+        )}
+        {/* name */}
+        <Link href="/" className={styles.name}>
+          {newProduct?.name}
+        </Link>
+      </div>
+      <div className={styles['item-price']}>¥{newProduct?.minPrice}</div>
+    </div>
+  )
+})
+
+GridViewItem.displayName = 'GridViewItem'
+
+export default GridViewItem
+```
+
+封装网络请求，获取热门商品的数据。
+
+src\service\features\home.ts
+
+```typescript
+export const getAllProductInfo = () =>
+  ztRequest.get<IResultData<AllProductInfo>>({
+    url: '/allProduct/gets'
+  })
+```
+
+在首页 `index.tsx` 中，发送网络请求，获取 `allProducts` 数据。
+
+同样的，将它传递给 grid-view 组件。
+
+src\pages\index.tsx
+
+```tsx
+<div className={classNames('wrapper', styles['content'])}>
+  <SectionTitle title="编辑推荐"></SectionTitle>
+  <GridView products={hotProducts}></GridView>
+  <SectionTitle title="热门商品"></SectionTitle>
+  <GridView products={allProducts}></GridView>
+</div>
+
+export const getServerSideProps: GetServerSideProps = wrapper.getServerSideProps(function (store) {
+  return async function (context) {
+    // 1.派发异步 action 来发起请求，拿到搜索建议，并存到 redux 中
+    await store.dispatch(fetchSearchSuggest())
+
+    // 2.发送网络请求，获取主页信息。
+    // 3.发送网络请求，获取商品数据
+    const [homeinfo, productinfo, allProductInfo] = await Promise.all([getHomeInfo(), getProductInfo(), getAllProductInfo()])
+    return {
+      props: {
+        banners: homeinfo.data.banners,
+        categorys: homeinfo.data.categorys,
+        recommends: homeinfo.data.recommends,
+        hotProducts: productinfo.data.hotProduct,
+        allProducts: allProductInfo.data.allProduct
+      }
+    }
+  }
+})
+```
+
+在 grid-view-item 中，进行类型缩小。
+
+src\components\grid-view-item\index.tsx
+
+```typescript
+interface IProps {
+  children?: ReactNode
+  product: HotProduct | AllProduct | Product
+  showTip: boolean
+}
+
+//...
+
+const newProduct = 'products' in product ? product.products : product
+```
+
+### 5.广告表盘
+
+创建 `/components/digital-panel/index.tsx` 组件，用于数字面板的显示。
+
+在其中接收 `itemdata` 数据。
+
+## 四、页脚
+
+创建 /components/footer/index.tsx 组件，用于页脚。
+
+## 五、详情页
+
+封装网络请求，获取商品详情的数据。
+
+src\service\features\home.ts
+
+```typescript
+export const getDetailProductInfo = (id: number) =>
+  ztRequest.get<IResultData<DetailProductInfo>>({
+    url: '/special/getdetail?specialTopicId=' + id
+  })
+```
+
+创建 `/pages/detail/index.tsx` 页面，作为商品详情页。
+
+在其中使用 `getServerSideProps` 方法，进行 ssr 渲染.
+
+src\pages\detail\index.tsx
+
+```tsx
+import React, { memo } from 'react'
+import type { FC, ReactNode } from 'react'
+import type { GetServerSideProps } from 'next'
+import wrapper from '@/stores'
+import { fetchSearchSuggest } from '@/stores/features/home'
+import { getDetailProductInfo } from '@/service/features/detail'
+import Link from "next/link";
+import Image from "next/image";
+import styles from "./index.module.scss";
+import classNames from "classnames";
+import GridView from '@/components/grid-view';
+import type { DetailProductInfo } from '@/types/product'
+
+interface IProps {
+  children?: ReactNode
+  detailData: DetailProductInfo
+}
+const Detail: FC<IProps> = memo(props => {
+  const { detailData } = props;
+  
+  return (
+    <div className={styles.detail}>
+      <div className={classNames('wrapper', styles.content)}>
+        {/* 图片 */}
+        <div className={styles.banner}>
+          <Link href={'/'}>
+            <Image className={styles.image} src={detailData?.webPic!} alt="air" fill></Image>
+          </Link>
+        </div>
+
+        {/* 商品列表 */}
+        <GridView products={detailData.products}></GridView>
+      </div>
+    </div>
+  )
+})
+
+Detail.displayName = 'Detail'
+
+export default Detail
+
+// ssr
+// getServerSideProps 是在服务器端运行
+export const getServerSideProps: GetServerSideProps = wrapper.getServerSideProps(function (store) {
+  return async context => {
+    // 1.触发一个异步的action来发起网络请求, 拿到搜索建议并存到redex中
+    await store.dispatch(fetchSearchSuggest())
+
+    const { id } = context.query // 拿到 url中查询字符串
+    // 2.拿到详情页面的数据
+    const res = await getDetailProductInfo(Number(id))
+    
+    return {
+      props: {
+        detailData: res.data
+      }
+    }
+  }
+})
+```
+
+在 Recommend 中点击时，跳转详情页。
+
+src\components\recommend\index.tsx
+
+```tsx
+<Link href={'/detail?id=' + item.id} className={styles['recommend-item']}></Link>
+```
+
+## 六、搜索页
+
+封装网络请求，获取搜索的数据。
+
+src\service\features\search.ts
+
+```typescript
+import { SearchData } from '@/types/search'
+import ztRequest from '..'
+
+interface SearchParams {
+  limit: number
+  offset: number
+  key: string
+}
+
+// 获取搜索数据
+export const getProductSearchData = (data: SearchParams) =>
+  ztRequest.post<SearchData>({
+    url: '/store/api/product/search',
+    data,
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded'
+    }
+  })
+```
+
+创建 `/pages/search/index.tsx` 作为搜索页。
+
+src\pages\search\index.tsx
+
+```tsx
+import React, { memo } from 'react'
+import type { FC, ReactNode } from 'react'
+import { fetchSearchSuggest } from '@/stores/features/home'
+import type { GetServerSideProps } from 'next'
+import wrapper from '@/stores'
+import { getProductSearchData } from '@/service/features/search'
+import GridView from '@/components/grid-view'
+import type { Product } from '@/types/product'
+import classNames from "classnames";
+
+interface IProps {
+  children?: ReactNode
+  products: Product[]
+}
+const Search: FC<IProps> = memo(props => {
+  const { products } = props;
+
+  return (
+    <div className="search">
+      <div className={classNames('wrapper')}>
+        <GridView products={products}></GridView>
+      </div>
+    </div>
+  )
+})
+
+Search.displayName = 'Search'
+
+export default Search
+
+// ssr
+export const getServerSideProps: GetServerSideProps = wrapper.getServerSideProps(function (store) {
+  return async context => {
+    // 1.触发一个异步的action来发起网络请求, 拿到搜索建议并存到redex中
+    await store.dispatch(fetchSearchSuggest())
+
+    const { q } = context.query // 拿到 url 中查询字符串
+    
+    // 2.拿到 搜索页面的数据
+    const res = await getProductSearchData({
+      limit: 60,
+      offset: 0,
+      key: q as string
+    })
+    return {
+      props: {
+        products: res.products
+      }
+    }
+  }
+})
+```
+
+在 search 组件中，点击搜索关键字，跳转到该页面。
+
+src\components\search\index.tsx
+
+```tsx
+// 事件处理：输入聚焦/失焦
+function onInputFocus(isFocus: boolean) {
+  // console.log("isFocus=>", isFocus);
+  setInputFocus(isFocus)
+}
+
+function onItemClick(name?: string) {
+  if (!name) return
+  console.log(name)
+  setPlaceholder(name)
+  goToSearchPage(name)
+}
+
+const router = useRouter()
+function goToSearchPage(name: string) {
+  router.push({
+    pathname: '/search',
+    query: {
+      q: name
+    }
+  })
+}
+
+//...
+
+<ul>
+  {searchData?.configKey &&
+    searchData?.configKey.map((item, index) => (
+      <li
+        key={item[String(index + 1) as keyof ConfigKey]}
+        onMouseDown={() => onItemClick(item[String(index + 1) as keyof ConfigKey])}
+      >
+        {item[String(index + 1) as keyof ConfigKey]}
+      </li>
+    ))}
+</ul>
+```
+
+## 七、项目打包部署
+
+1.在阿里云，按量付费，购买 ECS 实例。
+
+2.选择 CentOS 系统。
+
+3.开通安全组。
+
+4.配置 root 帐号的密码。
+
+5.ssh 远程连接服务器。
+
+6.在服务器上，安装 nodejs，使用 CentOS 自带的 yarn 工具（不会自动安装 npm）。
+
+```shell
+yum install nodejs
+```
+
+7.手动安装 npm。
+
+```shell
+yum install npm
+```
+
+8.将本地打包后的项目，拖入到远程服务器目录中。
+
+先在本地打包项目：
+
+再在本地预览打包后的项目：
+
+```shell
+npm run build
+
+npm run start
+```
+
+如果没有问题，可以删除项目中的 node_modules，再将整个项目拖入到远程服务器目录中。
+
+
+
+或者（更推荐的流程）：
+
+1.本地只上传源码 + 构建产物（例如 `.next/`）+ 依赖描述文件（`package.json` / lockfile）。
+
+2.服务器进入项目目录后再安装依赖：
+
+- 如果你用 npm，并且有 `package-lock.json`：
+
+  ```shell
+  npm ci
+  ```
+
+- 仅生产环境依赖（可选）：
+
+  ```shell
+  npm ci --omit=dev
+  ```
+
+3.然后在服务器上启动：
+
+- 方式一：先构建再启动
+
+  ```shell
+  npm run build
+  PORT=9090 npm run start
+  ```
+
+- 方式二：如果你已经把本地构建好的 `.next/` 一起上传了
+  - 服务器就只需要安装依赖，然后直接 `npm run start`
+  - 但要保证 Node 版本、依赖版本和你本地构建环境一致，否则可能出现运行时问题
+
+  详细解释：
+
+  - `.next/` 是什么
+    - 它是 Next.js 的“构建产物”（build output）目录
+    - `npm run build` 之后会生成 `.next/`，里面包含：
+      - 编译后的服务端代码（用于 SSR/路由处理）
+      - 编译后的客户端资源（js/css chunk）
+      - 一些运行时需要的 manifest 文件
+    - `npm run start` 启动时，本质是在读取 `.next/` 来提供服务
+
+  - 为什么上传了 `.next/` 可以不在服务器上再 `npm run build`
+    - 因为“构建”这一步你已经在本地做完了
+    - 服务器只需要：
+      - 有源码（有些场景需要）
+      - 有 `.next/`
+      - 有依赖（node_modules）
+      - 直接执行 `next start`（也就是 `npm run start`）即可
+
+  - 为什么要保证 Node 版本一致
+    - `.next/` 里包含 Node 运行的服务端产物
+    - Node 版本差异可能导致：
+      - 某些语法/特性不兼容
+      - 原生依赖（例如 sharp）在不同系统/Node 版本下需要重新编译
+    - 所以常见做法：本地和服务器都固定同一个 Node 大版本（例如都用 Node 18 或都用 Node 20）
+
+  - 为什么要保证“依赖版本”一致（lockfile 的意义）
+    - 依赖版本不一致可能导致：
+      - 构建时生成的产物和运行时加载的包版本不一致
+      - 出现一些难排查的运行时错误
+    - lockfile：
+      - npm 是 `package-lock.json`
+      - pnpm 是 `pnpm-lock.yaml`
+      - yarn 是 `yarn.lock`
+    - 它的作用是“锁定”每个依赖最终安装到的精确版本
+    - `npm ci` 会严格按 lockfile 安装，保证环境一致（比 `npm install` 更适合部署）
+
+  - 实际建议怎么选（更稳）
+    - **推荐：服务器上构建（方式一）**
+      - 优点：服务器环境就是最终运行环境，兼容性最好
+      - 缺点：服务器要花时间构建
+    - **只有在以下情况才考虑方式二（上传 `.next/`）**
+      - 你明确能保证：Node 版本一致 + lockfile 一致 + 系统环境一致
+      - 并且你希望减少服务器构建时间
+
+
+
+在远程的项目目录中，安装依赖。
+
+9.在远程服务器，运行项目：
+
+指定端口，运行项目：
+
+- PORT：是动态添加的环境变量
+
+```shell
+PORT=9090 npm run start
+```
+
+10.安装 *pm2*
+
+- *PM2* 是一个进程管理器, 帮助管理和保持在线应用程序；
+- 比如：负责管理 Node、Python 等程序，一直保持在后台运行。
+
+```shell
+npm install pm2 -g
+```
+
+使用 pm2 启动项目。
+
+```shell
+PORT=9090 pm2 start "PORT=8888 npm run start" --name music-next
+```
+
+为 pm2 生成配置文件。
+
+```shell
+pm2 init simple
+```
+
+在目录中，生成 `ecosystem.config.js` 文件，在其中进行配置：
+
+```js
+module.exports = {
+  apps: [
+    {
+      name: 'music-next',
+      script: "./node_modules/next/dist/bin/next", // npm run start 命令执行的路径
+      instances: max, // 根据服务器 CPU 核数，创建进程，如 2 核，会创建 2 个进程。
+      // instances: 5, // 指定启动实例（进程）的个数 5 个。
+      exec_mode: "cluster", // 运行的模式："cluster"（集群模式，负载均衡）、"fork"（默认）；
+      env: {
+        PORT: 9090
+      }
+    }
+  ]
+}
+```
+
+使用配置文件，启动项目：
+
+```shell
+pm2 start ecosystem.config.js
+```
+
+> 【补充】：另一种负载均衡：
+>
+> 购买多台服务器，在其中分别部署项目，使用 pm2 开启多进程，实现负载均衡。
+>
+> 再在多个服务器之间，使用 nginx，配置负载均衡。

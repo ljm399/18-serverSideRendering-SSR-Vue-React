@@ -10,6 +10,7 @@ dist
 # Node dependencies
 node_modules
 .next
+09b_project-by-apptailwindcss
 
 # Logs
 logs
